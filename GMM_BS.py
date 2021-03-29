@@ -37,8 +37,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 def Init_Gmm(data):
     """data is a tuple (nsamples x 3 x 240x320) of normalised images"""
     layers, height, width = data[0].shape
-    gmm_models = defaultdict(dict) #essentially we don't need this for deployment
-    #backgrnd_model = defaultdict(dict) #means of the heaviest weighted gaussian component
+    gmm_models = defaultdict(dict) #
     backgrnd_model = np.empty([layers, height, width])
     data_d = data.to(device)
     for i in range(height):
@@ -47,14 +46,11 @@ def Init_Gmm(data):
             with warnings.catch_warnings():
                 warnings.filterwarnings('error')
                 try:
-                    gmm_models[i][j] = GaussianMixture(n_components=5, n_features=layers)
+                    gmm_models[i][j] = GaussianMixture(n_components=5, n_features=layers) #takes forever. Need to improve method
                     gmm_models[i][j].to(device)
                     gmm_models[i][j].fit(data_d[:, :, i, j])
                 except Warning:
                     print((i, j))
-                    gmm_models[i][j] = GaussianMixture(n_components=2, n_features=layers)
-                    gmm_models[i][j].to(device)
-                    gmm_models[i][j].fit(data_d[:, :, i, j])
 
             largest_wt_inx = np.argmax(gmm_models[i][j].pi[0].detach().cpu().numpy())
             backgrnd_model[:, i, j] = gmm_models[i][j].mu[0][largest_wt_inx].detach().cpu().numpy()
@@ -93,7 +89,7 @@ while True:
     frame_nbr += 1
     if frame is None:
         break
-    #frame shape is 240 x 320 x 3, input to function shape is 3 x 240 x 320. output mask is 240 x 320 x 3
+
     fgMask = generate_mask(frame/256, backgrnd/256, thres = 0.3)  #normalise
     graysc = np.uint8(fgMask)
     #0 is background, 255 is foreground
@@ -105,15 +101,12 @@ while True:
     if len(contours) != 0:  #check
         ROI_nbr = 0
         for pic, contour in enumerate(contours):
-        #for i in range(len(contours)):
-            #contour = contours[i] #for id later when detecting motion
             area = cv2.contourArea(contour)
             if area > 200:
                 x, y, w, h = cv2.boundingRect(contour)
                 cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
                 ROI = frame[y:y + h, x:x + w]
                 ROI_nbr += 1
-                #cv2.imwrite('Result1/ROI_{}_{}.png'.format(ROI_nbr, frame_nbr), ROI)
 
     cv2.rectangle(frame, (10, 2), (100, 20), (255, 255, 255), -1)
     cv2.putText(frame, str(capture.get(cv2.CAP_PROP_POS_FRAMES)), (15, 15),
